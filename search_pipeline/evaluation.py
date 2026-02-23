@@ -1,8 +1,6 @@
 # Evaluation metrics: Precision@k, Recall@k, MRR.
 # Pass a list of labelled test cases to evaluate() to benchmark the pipeline.
-
 import numpy as np
-
 
 def precision_at_k(relevant_ids: set, results: list, k: int) -> float:
     """
@@ -37,7 +35,7 @@ def mrr(relevant_ids: set, results: list) -> float:
     return 0.0
 
 
-def evaluate(engine, test_cases: list, k_precision: int = 5, k_recall: int = 10) -> dict:
+def evaluate(engine, test_cases: list, ce_key, k_precision: int = 5, k_recall: int = 10) -> dict:
     """
     Run the search engine against a labelled test set and report averaged metrics.
 
@@ -61,7 +59,15 @@ def evaluate(engine, test_cases: list, k_precision: int = 5, k_recall: int = 10)
 
     for tc in test_cases:
         print(f"\n  Query: {tc['query']}")
-        results, _ = engine.search(tc["query"], verbose=False)
+        results, expanded_query, parser_used, or_used = engine.search(tc["query"],
+        top_k=10,
+        use_bm25=True,
+        use_expand=True,
+        use_or=False,
+        parser_mode="llm",
+        ce_key=ce_key,
+        verbose=True)
+
         rel     = set(tc["relevant_ids"])
 
         p = precision_at_k(rel, results, k_precision)
@@ -82,3 +88,4 @@ def evaluate(engine, test_cases: list, k_precision: int = 5, k_recall: int = 10)
     for metric, val in summary.items():
         print(f"  {metric:8s} = {val:.3f}")
     return summary
+

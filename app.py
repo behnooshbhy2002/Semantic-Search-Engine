@@ -9,8 +9,8 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 
-from search_pipeline import DB_PATH, FAISS_INDEX, DOC_IDS_PATH, Models, SearchEngine
-from search_pipeline.config import CROSS_ENCODER_REGISTRY, DEFAULT_CROSS_ENCODER
+from Search_Pipeline import DB_PATH, FAISS_INDEX, DOC_IDS_PATH, Models, SearchEngine
+from Search_Pipeline.config import CROSS_ENCODER_REGISTRY, DEFAULT_CROSS_ENCODER
 
 app = Flask(__name__)
 CORS(app)
