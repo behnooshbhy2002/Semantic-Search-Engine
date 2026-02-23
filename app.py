@@ -65,6 +65,7 @@ def search():
     query        = (body.get("query") or "").strip()
     top_k        = int(body.get("top_k", 10))
     use_bm25     = bool(body.get("use_bm25", True))
+    use_expand   = bool(body.get("use_expand", True))
     parser_mode  = body.get("parser_mode", "llm")    # "llm" | "rule"
     ce_key       = body.get("ce_key") or None        # None = keep current model
 
@@ -78,6 +79,7 @@ def search():
         query,
         top_k=top_k,
         use_bm25=use_bm25,
+        use_expand=use_expand,
         parser_mode=parser_mode,
         ce_key=ce_key,
         verbose=True,

@@ -83,6 +83,16 @@
         <span class="adv-hint" id="parserHint">فیلترها از طریق LLM استخراج می‌شوند — در صورت خطا، به روش دستی سوئیچ می‌شود</span>
       </div>
 
+      <!-- Query expansion toggle -->
+      <div class="adv-row">
+        <span class="adv-label">گسترش کوئری (Query Expansion):</span>
+        <label class="toggle-switch">
+          <input type="checkbox" id="expandToggle" checked onchange="setExpand(this.checked)" />
+          <span class="toggle-slider"></span>
+        </label>
+        <span class="adv-hint" id="expandHint">کوئری با کلمات مشابه و مترادف گسترش می‌یابد — دقت بازیابی را افزایش می‌دهد</span>
+      </div>
+
       <!-- Cross-encoder selector -->
       <div class="adv-row">
         <span class="adv-label">مدل رتبه‌بندی (Cross-Encoder):</span>

@@ -69,6 +69,7 @@ class SearchEngine:
         query:       str,
         top_k:       int  = DEFAULT_TOP_K,
         use_bm25:    bool = True,
+        use_expand:  bool = True,
         parser_mode: str  = "llm",   # "llm" | "rule"
         ce_key:      str  = None,
         verbose:     bool = True,
@@ -122,12 +123,17 @@ class SearchEngine:
             return results, "", parser_used
 
         # ── Hybrid path: FAISS + BM25 + reranker ─────────────────────────────
-        expanded = expand(
-            semantic_query,
-            self.models.bi_encoder,
-            llm_expansions=llm_expansions,
-            max_additions=MAX_EXPANSIONS,
-        )
+        if use_expand:
+            expanded = expand(
+                semantic_query,
+                self.models.bi_encoder,
+                llm_expansions=llm_expansions,
+                max_additions=MAX_EXPANSIONS,
+            )
+        else:
+            expanded = semantic_query
+            if verbose:
+                print("   ⏭️ Query expansion skipped (disabled by user).")
 
         if verbose:
             self._log_query(query, semantic_query, expanded, filters, parser_used)

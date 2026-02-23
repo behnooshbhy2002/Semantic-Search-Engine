@@ -10,6 +10,9 @@ let _queryTokens = [];
 // Currently selected parser mode: "llm" | "rule"
 let _parserMode = 'llm';
 
+// Whether to expand the query with synonyms/related terms
+let _useExpand = true;
+
 /* ── Helpers ──────────────────────────────────────────────────── */
 function $(id) { return document.getElementById(id); }
 
@@ -72,6 +75,14 @@ function setParser(mode) {
   $('parserHint').textContent = mode === 'llm'
     ? 'فیلترها از طریق LLM استخراج می‌شوند — در صورت خطا، به روش دستی سوئیچ می‌شود'
     : 'فیلترها با قوانین دستی (Regex/Fuzzy) استخراج می‌شوند — بدون نیاز به API';
+}
+
+/* ── Expand toggle ────────────────────────────────────────────── */
+function setExpand(enabled) {
+  _useExpand = enabled;
+  $('expandHint').textContent = enabled
+    ? 'کوئری با کلمات مشابه و مترادف گسترش می‌یابد — دقت بازیابی را افزایش می‌دهد'
+    : 'گسترش کوئری غیرفعال است — فقط عبارت اصلی جستجو می‌شود';
 }
 
 /* ── Keyboard shortcut ────────────────────────────────────────── */
@@ -142,6 +153,7 @@ async function runSearch() {
         query,
         top_k,
         use_bm25:    true,
+        use_expand:  _useExpand,
         parser_mode: _parserMode,
         ce_key:      ce_key || undefined,
       }),
