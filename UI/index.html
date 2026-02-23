@@ -83,6 +83,16 @@
         <span class="adv-hint" id="parserHint">فیلترها از طریق LLM استخراج می‌شوند — در صورت خطا، به روش دستی سوئیچ می‌شود</span>
       </div>
 
+      <!-- OR operator toggle -->
+      <div class="adv-row">
+        <span class="adv-label">عملگر OR (افزایش فراخوانی):</span>
+        <label class="toggle-switch">
+          <input type="checkbox" id="orToggle" onchange="setOrMode(this.checked)" />
+          <span class="toggle-slider"></span>
+        </label>
+        <span class="adv-hint" id="orHint">اگر نتیجه‌ای با AND یافت نشد، با OR جستجو مجدداً انجام می‌شود</span>
+      </div>
+
       <!-- Query expansion toggle -->
       <div class="adv-row">
         <span class="adv-label">گسترش کوئری (Query Expansion):</span>
@@ -113,6 +123,7 @@
     <div class="status-meta">
       <span class="status-badge" id="statusParser"></span>
       <span class="status-badge status-badge--ce" id="statusCe"></span>
+      <span class="status-badge status-badge--or" id="statusOr" style="display:none">⚡ عملگر OR فعال شد</span>
       <span id="statusTime"></span>
     </div>
   </div>

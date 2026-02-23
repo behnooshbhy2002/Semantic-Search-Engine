@@ -66,6 +66,7 @@ def search():
     top_k        = int(body.get("top_k", 10))
     use_bm25     = bool(body.get("use_bm25", True))
     use_expand   = bool(body.get("use_expand", True))
+    use_or       = bool(body.get("use_or", False))
     parser_mode  = body.get("parser_mode", "llm")    # "llm" | "rule"
     ce_key       = body.get("ce_key") or None        # None = keep current model
 
@@ -75,11 +76,12 @@ def search():
     if parser_mode not in ("llm", "rule"):
         return jsonify({"error": "parser_mode باید 'llm' یا 'rule' باشه"}), 400
 
-    results, expanded_query, parser_used = engine.search(
+    results, expanded_query, parser_used, or_used = engine.search(
         query,
         top_k=top_k,
         use_bm25=use_bm25,
         use_expand=use_expand,
+        use_or=use_or,
         parser_mode=parser_mode,
         ce_key=ce_key,
         verbose=True,
@@ -107,6 +109,7 @@ def search():
         "query":          query,
         "expanded_query": expanded_query,
         "parser_used":    parser_used,
+        "or_used":        or_used,
         "ce_key":         models._ce_key,
         "count":          len(payload),
         "results":        payload,

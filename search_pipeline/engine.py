@@ -70,10 +70,11 @@ class SearchEngine:
         top_k:       int  = DEFAULT_TOP_K,
         use_bm25:    bool = True,
         use_expand:  bool = True,
+        use_or:      bool = False,
         parser_mode: str  = "llm",   # "llm" | "rule"
         ce_key:      str  = None,
         verbose:     bool = True,
-    ) -> tuple[list[tuple[dict, float]], str, str]:
+    ) -> tuple[list[tuple[dict, float]], str, str, bool]:
         """
         Run the full search pipeline.
 
@@ -107,11 +108,14 @@ class SearchEngine:
         )
 
         # ── SQL-only path: skip every vector/ML step ──────────────────────────
-
-        filtered_rows = apply_filters(filters, "AND")
-        if not filtered_rows:
-            print("----- Using OR operator for increasing recall -----")
-            filtered_rows = apply_filters(filters, "OR")
+        or_used = False
+        filtered_rows = []
+        if filters:
+            filtered_rows = apply_filters(filters, "AND")
+            if not filtered_rows and use_or:
+                print("----- Using OR operator for increasing recall -----")
+                filtered_rows = apply_filters(filters, "OR")
+                or_used = True
 
         if sql_only:
             if verbose:
@@ -120,10 +124,10 @@ class SearchEngine:
             results = [(doc, 0.0) for doc in docs]
             if verbose:
                 self._log_results(results, time.time() - t0)
-            return results, "", parser_used
+            return results, "", parser_used, or_used
 
         # ── Hybrid path: FAISS + BM25 + reranker ─────────────────────────────
-        if use_expand:
+        if use_expand and semantic_query:
             expanded = expand(
                 semantic_query,
                 self.models.bi_encoder,
@@ -133,28 +137,32 @@ class SearchEngine:
         else:
             expanded = semantic_query
             if verbose:
-                print("   ⏭️ Query expansion skipped (disabled by user).")
+                print("   ⏭️ Query expansion skipped")
 
         if verbose:
             self._log_query(query, semantic_query, expanded, filters, parser_used)
 
-        candidate_ids = (
-            self._filtered_search(semantic_query, expanded, filtered_rows, top_k, use_bm25, verbose)
-            if filtered_rows
-            else self._full_search(semantic_query, expanded, top_k, use_bm25)
-        )
+        if semantic_query:
+            candidate_ids = (
+                self._filtered_search(semantic_query, expanded, filtered_rows, top_k, use_bm25, verbose)
+                if filtered_rows
+                else self._full_search(semantic_query, expanded, top_k, use_bm25)
+            )
 
-        docs = fetch_full_docs(candidate_ids)
-        if not docs:
-            log.info("No candidate documents found.")
-            return [], expanded, parser_used
+            docs = fetch_full_docs(candidate_ids)
+            if not docs:
+                log.info("No candidate documents found.")
+                return [], expanded, parser_used
+            
+            results = self.models.rerank(semantic_query, docs)[:top_k]
 
-        results = self.models.rerank(semantic_query, docs)[:top_k]
+            if verbose:
+                self._log_results(results, time.time() - t0)
 
-        if verbose:
-            self._log_results(results, time.time() - t0)
-
-        return results, expanded, parser_used
+            return results, expanded, parser_used, or_used
+        
+        if not semantic_query and not filtered_rows:
+            return [], [], parser_used, or_used
 
     # ── Parsing ───────────────────────────────────────────────────────────────
 
@@ -190,6 +198,7 @@ class SearchEngine:
                 # Filters present but no semantic keywords → pure SQL lookup
                 if has_filters and not has_keywords:
                     return result.filters, None, "llm", True, None
+                
 
                 return result.filters, result.keywords, "llm", False, result.expanded_keywords
 

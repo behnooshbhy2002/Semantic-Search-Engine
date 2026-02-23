@@ -13,6 +13,9 @@ let _parserMode = 'llm';
 // Whether to expand the query with synonyms/related terms
 let _useExpand = true;
 
+// Whether to fall back to OR operator when AND returns no results
+let _useOr = false;
+
 /* ── Helpers ──────────────────────────────────────────────────── */
 function $(id) { return document.getElementById(id); }
 
@@ -77,6 +80,14 @@ function setParser(mode) {
     : 'فیلترها با قوانین دستی (Regex/Fuzzy) استخراج می‌شوند — بدون نیاز به API';
 }
 
+/* ── OR mode toggle ───────────────────────────────────────────── */
+function setOrMode(enabled) {
+  _useOr = enabled;
+  $('orHint').textContent = enabled
+    ? 'در صورت عدم یافتن نتیجه با AND، جستجو با OR تکرار می‌شود'
+    : 'عملگر OR غیرفعال است — فقط نتایج کاملاً منطبق نمایش داده می‌شوند';
+}
+
 /* ── Expand toggle ────────────────────────────────────────────── */
 function setExpand(enabled) {
   _useExpand = enabled;
@@ -100,7 +111,18 @@ function addFilter(text) {
 
 /* ── Tokenise a query string into searchable terms ───────────── */
 function tokenise(query) {
-  return query.split(/\s+/).filter(t => t.length >= 2);
+  if (!query) return [];
+
+  if (Array.isArray(query)) {
+    return query.filter(t => typeof t === 'string' && t.length >= 2);
+  }
+
+  if (typeof query === 'string') {
+    const tokens = query.split(/\s+/).filter(t => t.length >= 2);
+    return [...new Set(tokens)];
+  }
+
+  return [];
 }
 
 /* ── Highlight query tokens inside a plain-text string ───────── */
@@ -114,15 +136,32 @@ function highlight(text, tokens) {
 /* ── Show the expanded query box ─────────────────────────────── */
 function renderExpandedQuery(original, expanded) {
   const box = $('expandedBox');
-  if (!expanded || expanded === original) {
+
+  if (!expanded) {
     box.classList.remove('visible');
     return;
   }
-  const originalTokens = new Set(tokenise(original));
-  const chips = tokenise(expanded).map(tok => {
-    const cls = originalTokens.has(tok) ? 'original' : 'added';
+
+  const origTokens = tokenise(original);
+  const expTokens  = tokenise(expanded);
+
+  // حذف تکراری‌ها
+  const origSet = new Set(origTokens);
+  const expSet  = new Set(expTokens);
+
+  // بررسی اینکه آیا واقعاً چیزی اضافه شده یا نه
+  const hasNewTerm = [...expSet].some(t => !origSet.has(t));
+
+  if (!hasNewTerm) {
+    box.classList.remove('visible');
+    return;
+  }
+
+  const chips = expTokens.map(tok => {
+    const cls = origSet.has(tok) ? 'original' : 'added';
     return '<span class="exp-term ' + cls + '">' + escHtml(tok) + '</span>';
   }).join('');
+
   $('expandedTerms').innerHTML = chips;
   box.classList.add('visible');
 }
@@ -154,6 +193,7 @@ async function runSearch() {
         top_k,
         use_bm25:    true,
         use_expand:  _useExpand,
+        use_or:      _useOr,
         parser_mode: _parserMode,
         ce_key:      ce_key || undefined,
       }),
@@ -181,13 +221,23 @@ async function runSearch() {
     // Cross-encoder badge
     $('statusCe').textContent = '📐 ' + (data.ce_key || ce_key || '');
 
+    // OR operator badge
+    const orBadge = $('statusOr');
+    orBadge.style.display = data.or_used ? 'inline-flex' : 'none';
+
     // Update the CE select to reflect what the server is actually using
     if (data.ce_key && $('ceSelect').value !== data.ce_key) {
       $('ceSelect').value = data.ce_key;
     }
 
     renderExpandedQuery(query, data.expanded_query);
-    if (data.expanded_query) _queryTokens = tokenise(data.expanded_query);
+
+    _expandedOnlyTokens = [];
+
+    if (data.expanded_query) {
+      const expTokens  = tokenise(data.expanded_query);
+      _expandedOnlyTokens = expTokens;
+    }
 
     if (data.results.length === 0) {
       $('resultsContainer').innerHTML =
@@ -237,7 +287,7 @@ function renderCardHeader(doc, rank) {
   return '<div class="card-header">' +
     '<div class="card-rank">' + rank + '</div>' +
     '<div class="card-header-right">' +
-      '<div class="card-title">' + highlight(doc.title || '—', _queryTokens) + '</div>' +
+      '<div class="card-title">' + highlight(doc.title || '—', _expandedOnlyTokens) + '</div>' +
       '<div class="card-meta">' + tags + '</div>' +
     '</div></div>';
 }
@@ -254,7 +304,7 @@ function renderCardBody(doc) {
     ? '<div class="card-abstract-wrap">' +
         '<div class="abstract-toggle"><span class="toggle-arrow">▼</span>' +
         '<span class="toggle-text">نمایش چکیده</span></div>' +
-        '<div class="card-abstract">' + highlight(doc.abs_text, _queryTokens) + '</div>' +
+        '<div class="card-abstract">' + highlight(doc.abs_text, _expandedOnlyTokens) + '</div>' +
       '</div>'
     : '';
 
