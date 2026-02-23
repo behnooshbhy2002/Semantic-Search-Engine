@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ایران‌داک — جستجوی هوشمند</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<!-- Header -->
+<header>
+  <div class="logo">
+    <span class="logo-dot">◆</span>
+    ایران‌داک
+  </div>
+  <span class="header-sub">جستجوی هوشمند پایان‌نامه‌ها و پروپوزال‌ها</span>
+</header>
+
+<!-- Hero -->
+<div class="hero">
+  <h1 class="hero-title">جستجوی <em>هوشمند</em> در منابع علمی</h1><br>
+  <p class="hero-desc">جستجو با زبان طبیعی فارسی — فیلتر بر اساس سال، مقطع، استاد، دانشگاه و بیشتر</p>
+
+  <div class="search-wrapper">
+    <input
+      id="searchInput"
+      type="text"
+      placeholder="مثال: پایان‌نامه‌های دکتری هوش مصنوعی در دانشگاه تهران"
+      autocomplete="off"
+    />
+    <button id="searchBtn" onclick="runSearch()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+      </svg>
+      جستجو
+    </button>
+  </div>
+
+  <div class="filters">
+    <span class="filter-label">فیلتر سریع:</span>
+    <button class="filter-chip" onclick="addFilter('دکتری')">دکتری</button>
+    <button class="filter-chip" onclick="addFilter('ارشد')">ارشد</button>
+    <button class="filter-chip" onclick="addFilter('پروپوزال')">پروپوزال</button>
+    <button class="filter-chip" onclick="addFilter('پایان‌نامه')">پایان‌نامه</button>
+    <button class="filter-chip" onclick="addFilter('1403')">۱۴۰۳</button>
+    <button class="filter-chip" onclick="addFilter('1404')">۱۴۰۴</button>
+    <select class="top-k-select" id="topKSelect">
+      <option value="5">۵ نتیجه</option>
+      <option value="10" selected>۱۰ نتیجه</option>
+      <option value="20">۲۰ نتیجه</option>
+    </select>
+  </div>
+
+  <!-- Advanced settings panel -->
+  <div class="advanced-panel">
+    <button class="advanced-toggle" onclick="toggleAdvanced()" id="advancedToggleBtn">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/>
+      </svg>
+      تنظیمات پیشرفته
+      <span class="adv-arrow" id="advArrow">▾</span>
+    </button>
+
+    <div class="advanced-body" id="advancedBody">
+
+      <!-- Parser mode -->
+      <div class="adv-row">
+        <span class="adv-label">روش تحلیل کوئری:</span>
+        <div class="parser-toggle-group">
+          <button class="parser-btn active" id="parserLlmBtn" onclick="setParser('llm')">
+            <span class="parser-icon">🤖</span>
+            هوش مصنوعی (LLM)
+            <span class="parser-badge">پیشنهادی</span>
+          </button>
+          <button class="parser-btn" id="parserRuleBtn" onclick="setParser('rule')">
+            <span class="parser-icon">⚙️</span>
+            دستی (Regex)
+          </button>
+        </div>
+        <span class="adv-hint" id="parserHint">فیلترها از طریق LLM استخراج می‌شوند — در صورت خطا، به روش دستی سوئیچ می‌شود</span>
+      </div>
+
+      <!-- Cross-encoder selector -->
+      <div class="adv-row">
+        <span class="adv-label">مدل رتبه‌بندی (Cross-Encoder):</span>
+        <select class="ce-select" id="ceSelect">
+          <option value="">در حال بارگذاری...</option>
+        </select>
+        <span class="adv-hint">مدل‌های دقیق‌تر کندتر هستند</span>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- Results -->
+<div class="results-area">
+  <div class="status-bar" id="statusBar">
+    <span class="status-count" id="statusCount"></span>
+    <div class="status-meta">
+      <span class="status-badge" id="statusParser"></span>
+      <span class="status-badge status-badge--ce" id="statusCe"></span>
+      <span id="statusTime"></span>
+    </div>
+  </div>
+
+  <!-- Expanded query display box -->
+  <div class="expanded-box" id="expandedBox">
+    <span class="expanded-label">🔁 کوئری گسترش‌یافته:</span>
+    <div class="expanded-terms" id="expandedTerms"></div>
+  </div>
+
+  <div id="resultsContainer">
+    <div class="state-box">
+      <div class="icon">🔍</div>
+      <p>عبارت جستجوی خود را وارد کنید</p>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <span>ایران‌داک — جستجوی ترکیبی FAISS + BM25 + Cross-Encoder</span>
+  <span id="apiStatus">در حال اتصال به سرور...</span>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
