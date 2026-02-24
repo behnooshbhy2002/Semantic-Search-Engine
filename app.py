@@ -11,15 +11,16 @@ from flask_cors import CORS
 
 from Search_Pipeline import DB_PATH, FAISS_INDEX, DOC_IDS_PATH, Models, SearchEngine
 from Search_Pipeline.config import CROSS_ENCODER_REGISTRY, DEFAULT_CROSS_ENCODER
+from Search_Pipeline.testpersain import process_farsi_text
 
 app = Flask(__name__)
 CORS(app)
 
-print("در حال راه‌اندازی سرور...")
+print(process_farsi_text("در حال راه‌اندازی سرور..."))
 models = Models()
 models.load_index(FAISS_INDEX, DOC_IDS_PATH)
 engine = SearchEngine(models)
-print("✅ سرور آماده‌ست.\n")
+print(process_farsi_text("✅ سرور آماده‌ست.\n"))
 
 
 @app.get("/api/health")
@@ -50,8 +51,6 @@ def list_models():
 @app.post("/api/search")
 def search():
     """
-    جستجو رو اجرا می‌کنه.
-
     body (JSON):
         query        — عبارت جستجو (اجباری)
         top_k        — تعداد نتایج (پیش‌فرض: 10)
@@ -119,7 +118,7 @@ def search():
 @app.get("/api/schema")
 def schema():
     """ستون‌های جدول documents رو برمی‌گردونه."""
-    from search_pipeline.database import get_schema
+    from Search_Pipeline.database import get_schema
     cols = get_schema()
     return jsonify({"columns": [{"name": c, "type": t} for c, t in cols]})
 

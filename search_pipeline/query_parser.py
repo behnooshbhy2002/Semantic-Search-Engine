@@ -114,18 +114,6 @@ def _find_university_in_query(query: str) -> str | None:
         if not window:
             continue
 
-        # Score all DB university names against the window
-        # best_name  = None
-        # best_score = 0.0
-        # for uni_name in _university_list:
-        #     score = _char_overlap_score(window, uni_name)
-        #     if score > best_score:
-        #         best_score = score
-        #         best_name  = uni_name
-
-        # if best_score >= 0.15:   # threshold: at least some overlap
-        #     return best_name
-        
 
         scores = []
         for uni_name in _university_list:

@@ -23,11 +23,12 @@ import numpy as np
 
 from . import llm_parser
 from .config      import DEFAULT_TOP_K, MAX_EXPANSIONS, RRF_K
-from .database    import apply_filters, fetch_full_docs, text_search_person
+from .database    import apply_filters, fetch_full_docs
 from .expander    import expand
 from .normalizer  import normalize
-from .query_parser import init_university_list, parse_filters, strip_filter_tokens
+from .query_parser import parse_filters, strip_filter_tokens
 from .ranking     import HAS_BM25, bm25_score, reciprocal_rank_fusion
+from .testpersain import process_farsi_text
 
 log = logging.getLogger(__name__)
 
@@ -75,27 +76,7 @@ class SearchEngine:
         ce_key:      str  = None,
         verbose:     bool = True,
     ) -> tuple[list[tuple[dict, float]], str, str, bool]:
-        """
-        Run the full search pipeline.
 
-        Args:
-            query        — raw user query (Persian natural language)
-            top_k        — number of results to return
-            use_bm25     — whether to fuse BM25 scores via RRF
-            parser_mode  — "llm" or "rule"
-            ce_key       — cross-encoder registry key (None = keep current)
-            verbose      — print pipeline trace to stdout
-
-        Returns:
-            (results, expanded_query, parser_used)
-            results       — [(doc_dict, score), …] sorted best-first
-            expanded_query — query after synonym expansion (shown in UI)
-            parser_used    — "llm" or "rule" (reflects actual parser that ran)
-
-        SQL-only mode (triggered when LLM finds filters but no semantic keywords):
-            bi-encoder, FAISS, BM25, and cross-encoder are all skipped.
-            SQL results are returned directly, score = 0.0 for all rows.
-        """
         t0 = time.time()
 
         if ce_key:
@@ -172,18 +153,10 @@ class SearchEngine:
         parser_mode: str,
         verbose:     bool,
     ) -> tuple[dict, str | None, str, bool, list[str] | None]:
-        """
-        Return (filters, semantic_query, parser_used, sql_only, llm_expansions).
 
-        sql_only=True  → pure structured lookup; skip all vector/ML steps.
-        llm_expansions → list[str] from LLM's expanded_keywords field, or None.
-
-        LLM path is tried first when parser_mode == "llm".
-        Falls back to rule parser transparently on any failure.
-        """
         if parser_mode == "llm":
             if verbose:
-                print("🤖 Trying LLM parser...")
+                print("Trying LLM parser...")
             result = llm_parser.extract(query)
 
             if result.success:
@@ -191,9 +164,9 @@ class SearchEngine:
                 has_keywords = bool(result.keywords)
 
                 if verbose:
-                    print(f"   LLM filters:    {result.filters}")
-                    print(f"   LLM keywords:   {result.keywords or '(none — SQL-only mode)'}")
-                    print(f"   LLM expansions: {result.expanded_keywords}")
+                    print(process_farsi_text(f"   LLM filters:    {result.filters}"))
+                    print(process_farsi_text(f"   LLM keywords:   {result.keywords or '(none — SQL-only mode)'}"))
+                    print(process_farsi_text(f"   LLM expansions: {result.expanded_keywords}"))
 
                 # Filters present but no semantic keywords → pure SQL lookup
                 if has_filters and not has_keywords:
@@ -239,17 +212,6 @@ class SearchEngine:
         texts = _build_texts(filtered_records)
         return self._rank_subset(expanded, ids, texts, top_k, use_bm25, semantic_query)
 
-    # def _person_fallback(self, filters: dict, verbose: bool) -> list[tuple]:
-    #     """Full-text fallback for person-name filters when SQL returns nothing."""
-    #     for field in ("advisors", "authors", "co_advisors"):
-    #         if field not in filters:
-    #             continue
-    #         rows = text_search_person(filters[field], field)
-    #         if rows:
-    #             if verbose:
-    #                 print(f"   Person fallback ({field}): {len(rows)} hit(s)")
-    #             return rows
-    #     return []
 
     # ── Retrieval: full-index path ────────────────────────────────────────────
 
@@ -337,13 +299,13 @@ class SearchEngine:
         filters:   dict,
         parser:    str,
     ) -> None:
-        print(f"\n🔎 Original : {original}")
+        print(process_farsi_text(f"\n🔎 Original : {original}"))
         if semantic != original:
-            print(f"   Semantic : {semantic}")
+            print(process_farsi_text(f"   Semantic : {semantic}"))
         if expanded != semantic:
-            print(f"   Expanded : {expanded}")
+            print(process_farsi_text(f"   Expanded : {expanded}"))
         if filters:
-            print(f"   Filters  : {filters}")
+            print(process_farsi_text(f"   Filters  : {filters}"))
         print(f"   Parser   : {parser}  |  CE: {self.models._ce_key}")
 
     def _log_results(self, results: list, elapsed: float) -> None:
@@ -351,7 +313,7 @@ class SearchEngine:
         for rank, (doc, score) in enumerate(results, 1):
             print("=" * 65)
             print(f"  #{rank}  score={score:.4f}  id={doc['id']}")
-            print(f"  Title: {doc['title']}")
+            print(process_farsi_text(f"  Title: {doc['title']}"))
             for field, label in (
                 ("authors",     "Author(s)   "),
                 ("advisors",    "Advisor(s)  "),
@@ -359,13 +321,13 @@ class SearchEngine:
                 ("university",  "University  "),
             ):
                 if doc.get(field):
-                    print(f"  {label}: {doc[field]}")
-            print(
+                    print(process_farsi_text(f"  {label}: {doc[field]}"))
+            print(process_farsi_text(
                 f"  Degree: {doc.get('degree','')} | "
                 f"Year: {doc.get('year','')} | "
                 f"Type: {doc.get('doc_type','')}"
-            )
+            ))
             kw = doc.get("keyword_text", "")
             if kw:
                 preview = kw[:80] + ("…" if len(kw) > 80 else "")
-                print(f"  Keywords: {preview}")
+                print(process_farsi_text(f"  Keywords: {preview}"))

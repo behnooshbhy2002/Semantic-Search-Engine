@@ -1,24 +1,3 @@
-# expander.py
-# Query expansion — enriches the semantic query to improve recall.
-#
-# Three complementary sources, combined and deduplicated:
-#
-#   Source 1 — LLM expanded_keywords (highest quality, zero extra latency
-#               since the LLM call already happened in llm_parser.extract())
-#
-#   Source 2 — Embedding-based expansion:
-#               Encode the query and each candidate n-gram; keep n-grams
-#               whose cosine similarity to the query vector is >= threshold.
-#               These are "semantically close sub-phrases" the encoder already
-#               knows about — safe to append without hurting precision.
-#
-#   Source 3 — KeyBERT-style extraction:
-#               Same candidate set as Source 2, but ranked by similarity and
-#               capped at top_n — picks the most salient phrases to surface.
-#
-# The final expanded string is capped at max_additions extra tokens so the
-# query doesn't drift too far from the original intent.
-
 from __future__ import annotations
 
 import re
@@ -75,12 +54,7 @@ def _embedding_expansion(
     top_n:         int   = 4,
     sim_threshold: float = 0.70,
 ) -> list[str]:
-    """
-    Return phrases from the query itself that are most similar to the full query
-    (KeyBERT-style) AND all n-grams above *sim_threshold* (embedding-based).
 
-    Both sources share the same batch of embeddings so the encoder runs once.
-    """
     tokens = _tokenise(query)
     if len(tokens) < 2:
         return []
@@ -127,28 +101,7 @@ def expand(
     sim_threshold:      float             = 0.70,
     keybert_top_n:      int               = 4,
 ) -> str:
-    """
-    Return an enriched version of *query* for better recall.
 
-    Args:
-        query           — semantic query (keywords only, filter tokens stripped)
-        bi_encoder      — loaded SentenceTransformer instance
-        llm_expansions  — list[str] from LLM's `expanded_keywords` field (may be None)
-        max_additions   — hard cap on extra tokens appended
-        sim_threshold   — cosine threshold for embedding-based expansion
-        keybert_top_n   — how many top phrases to take for KeyBERT-style expansion
-
-    Expansion order (priority):
-        1. LLM expanded_keywords  (highest quality)
-        2. Embedding-based above threshold
-        3. KeyBERT-style top-n
-    All sources are deduplicated; original query tokens are never re-added.
-
-    Example:
-        query          = "یادگیری ماشین تشخیص بیماری"
-        llm_expansions = ["machine learning", "deep learning", "diagnosis"]
-        → "یادگیری ماشین تشخیص بیماری machine learning deep learning diagnosis یادگیری ماشین"
-    """
     if not query or not query.strip():
         return query
 

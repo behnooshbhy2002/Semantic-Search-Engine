@@ -113,12 +113,12 @@ def _to_filter_dict(llm_data: dict) -> dict:
 
     elif year_exact is not None:
         try:
-            # اگر تک عدد بود → int
+            # if one number → int
             if isinstance(year_exact, (int, str)):
                 cleaned = int(year_exact)
                 f["year_exact"] = cleaned
             
-            # اگر لیست بود → لیست اعداد معتبر
+            # if List of numbers -> List of valid numbers
             elif isinstance(year_exact, (list, tuple)):
                 cleaned_years = []
                 for y in year_exact:

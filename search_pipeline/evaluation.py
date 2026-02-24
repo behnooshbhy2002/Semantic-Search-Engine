@@ -1,6 +1,8 @@
 # Evaluation metrics: Precision@k, Recall@k, MRR.
 # Pass a list of labelled test cases to evaluate() to benchmark the pipeline.
 import numpy as np
+from .testpersain import process_farsi_text
+
 
 def precision_at_k(relevant_ids: set, results: list, k: int) -> float:
     """
@@ -58,7 +60,7 @@ def evaluate(engine, test_cases: list, ce_key, k_precision: int = 5, k_recall: i
     p_list, r_list, mrr_list = [], [], []
 
     for tc in test_cases:
-        print(f"\n  Query: {tc['query']}")
+        print(process_farsi_text(f"\n  Query: {tc['query']}"))
         results, expanded_query, parser_used, or_used = engine.search(tc["query"],
         top_k=10,
         use_bm25=True,
