@@ -194,28 +194,48 @@ _SQL_STRIP_PATTERNS = [
 _SQL_STRIP_RE = re.compile("|".join(f"(?:{p})" for p in _SQL_STRIP_PATTERNS))
 
 
+import re
+
 def strip_filter_tokens(query: str, filters: dict) -> str:
     """
-    Remove the parts of the query that were already captured as SQL filters.
+    Remove all filter values (word by word) from the query text.
 
-    The remaining text is the pure semantic intent — e.g.:
-        "پروپوزال دکتری دانشگاه تهران هوش مصنوعی" -> "هوش مصنوعی"
+    The goal is to eliminate metadata terms already captured as SQL filters
+    so that the remaining query represents only the semantic intent.
 
-    This string is passed to the bi-encoder and cross-encoder so they focus
-    on the actual research topic rather than metadata noise.
-
-    If filters is empty (no SQL involved), returns the original query unchanged.
+    If filters is empty, the original query is returned unchanged.
     """
+
     if not filters:
         return query
 
     cleaned = _SQL_STRIP_RE.sub(" ", query)
-    # Collapse multiple spaces
-    cleaned = re.sub(r"\s{2,}", " ", cleaned).strip()
 
-    # If stripping removed everything, fall back to the original
-    # (better to have a noisy query than an empty one)
-    return cleaned if len(cleaned) >= 2 else query
+    for value in filters.values():
+        if not value:
+            continue
+
+        # Support both single values and lists of values
+        if isinstance(value, list):
+            values = value
+        else:
+            values = [value]
+
+        for v in values:
+            # Split filter value into individual tokens
+            for token in str(v).split():
+                # Remove exact token match (safer boundary for Persian text)
+                cleaned = re.sub(
+                    rf'(?<!\S){re.escape(token)}(?!\S)',
+                    ' ',
+                    cleaned
+                )
+
+    # Collapse multiple spaces
+    cleaned = re.sub(r'\s{2,}', ' ', cleaned).strip()
+
+    # If stripping removed everything, fall back to original query
+    return cleaned
 
 
 # ---------------------------------------------------------------------------

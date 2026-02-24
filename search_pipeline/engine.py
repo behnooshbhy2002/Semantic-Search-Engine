@@ -184,7 +184,8 @@ class SearchEngine:
 
         # Guard: never send an empty string to the encoders
         if len(semantic_query.strip()) < 2:
-            semantic_query = query
+            semantic_query = None
+            return filters, semantic_query, "rule", True, None
 
         return filters, semantic_query, "rule", False, None
 
