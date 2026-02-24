@@ -11,7 +11,7 @@ from flask_cors import CORS
 
 from Search_Pipeline import DB_PATH, FAISS_INDEX, DOC_IDS_PATH, Models, SearchEngine
 from Search_Pipeline.config import CROSS_ENCODER_REGISTRY, DEFAULT_CROSS_ENCODER
-from Search_Pipeline.testpersain import process_farsi_text
+from Search_Pipeline.display_persain import process_farsi_text
 
 app = Flask(__name__)
 CORS(app)
@@ -25,18 +25,11 @@ print(process_farsi_text("✅ سرور آماده‌ست.\n"))
 
 @app.get("/api/health")
 def health():
-    """بررسی می‌کنه سرور درسته یا نه."""
     return jsonify({"status": "ok", "db": DB_PATH})
 
 
 @app.get("/api/models")
 def list_models():
-    """
-    لیست cross-encoder های قابل انتخاب رو برمی‌گردونه.
-
-    خروجی:
-        [{"key": "bge-base", "label": "...", "default": true}, ...]
-    """
     result = []
     for key, info in CROSS_ENCODER_REGISTRY.items():
         result.append({
@@ -50,16 +43,7 @@ def list_models():
 
 @app.post("/api/search")
 def search():
-    """
-    body (JSON):
-        query        — عبارت جستجو (اجباری)
-        top_k        — تعداد نتایج (پیش‌فرض: 10)
-        use_bm25     — آیا BM25 هم استفاده بشه (پیش‌فرض: true)
-        parser_mode  — "llm" یا "rule" (پیش‌فرض: "llm")
-        ce_key       — کلید cross-encoder از /api/models (پیش‌فرض: مدل فعلی)
 
-    خروجی: لیست نتایج با تمام فیلدها + parser_used
-    """
     body         = request.get_json(force=True) or {}
     query        = (body.get("query") or "").strip()
     top_k        = int(body.get("top_k", 10))
@@ -117,7 +101,6 @@ def search():
 
 @app.get("/api/schema")
 def schema():
-    """ستون‌های جدول documents رو برمی‌گردونه."""
     from Search_Pipeline.database import get_schema
     cols = get_schema()
     return jsonify({"columns": [{"name": c, "type": t} for c, t in cols]})

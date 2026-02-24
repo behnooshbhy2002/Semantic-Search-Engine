@@ -1,7 +1,7 @@
 # Evaluation metrics: Precision@k, Recall@k, MRR.
 # Pass a list of labelled test cases to evaluate() to benchmark the pipeline.
 import numpy as np
-from .testpersain import process_farsi_text
+from .display_persain import process_farsi_text
 
 
 def precision_at_k(relevant_ids: set, results: list, k: int) -> float:

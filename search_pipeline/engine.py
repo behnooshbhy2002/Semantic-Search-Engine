@@ -28,7 +28,7 @@ from .expander    import expand
 from .normalizer  import normalize
 from .query_parser import parse_filters, strip_filter_tokens
 from .ranking     import HAS_BM25, bm25_score, reciprocal_rank_fusion
-from .testpersain import process_farsi_text
+from .display_persain import process_farsi_text
 
 log = logging.getLogger(__name__)
 

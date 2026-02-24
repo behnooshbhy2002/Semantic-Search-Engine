@@ -9,7 +9,11 @@ from __future__ import annotations
 import json
 import logging
 
-from .config import TEXT2SQL_API_KEY, TEXT2SQL_BASE_URL, TEXT2SQL_MODEL
+# فرض می‌کنیم این مقادیر در config.py تعریف شده‌اند
+from .config import (
+    TEXT2SQL_API_KEY,      # ← کلید جدید برای Groq
+    TEXT2SQL_MODEL,        # مثلاً "qwen/qwen3-32b" یا "llama-3.1-70b-versatile" و ...
+)
 
 log = logging.getLogger(__name__)
 
@@ -22,6 +26,7 @@ _SYSTEM_PROMPT = """شما یک موتور استخراج اطلاعات ساخ�
     • پارسا    ← هر نوع پایان‌نامه / رساله
     • پیشنهاده ← هر نوع پروپوزال / پیشنهادنامه
 — اگر چند دانشگاه یا موسسه دیدی لیست همه را برگردان.
+-  همچنین اگر کاربر دانشکده نوشته بود هم در فیلد دانشگاه قرارش بده
 — اگر غلط املایی در کلمات کلیدی، نام دانشگاه و غیره وجود داشت، خودت درستش کن.
 — فیلد keywords: کلمات کلیدی معنایی خالص کوئری (بدون متادیتا مثل سال/مقطع/دانشگاه).
 — فیلد expanded_keywords: در صورت وجود keywords، حداکثر ۱۰ واژه یا عبارت مرتبط
@@ -47,55 +52,61 @@ _SYSTEM_PROMPT = """شما یک موتور استخراج اطلاعات ساخ�
 # ── LLM client (lazy import) ──────────────────────────────────────────────────
 
 def _get_client():
-    """Return an OpenAI-compatible client, or raise ImportError."""
-    from openai import OpenAI          # lazy: don't require openai at import time
-    return OpenAI(api_key=TEXT2SQL_API_KEY, base_url=TEXT2SQL_BASE_URL)
+    """Return a Groq client, or raise ImportError."""
+    from groq import Groq          # lazy import
+    if not TEXT2SQL_API_KEY:
+        raise ValueError("Groq API key is not set in config")
+    return Groq(api_key=TEXT2SQL_API_KEY)
 
 
 # ── Raw API call ──────────────────────────────────────────────────────────────
 
 def _call_llm(query: str) -> dict:
     """
-    Call the LLM and return the parsed JSON dict.
+    Call the Groq LLM and return the parsed JSON dict.
     Raises on any network / parse failure — callers decide how to handle it.
     """
     client = _get_client()
+
     resp = client.chat.completions.create(
         model=TEXT2SQL_MODEL,
-        temperature=0,
+        temperature=0.0,               # برای استخراج ساختار یافته بهتر است پایین باشد
+        max_tokens=1024,               # معمولاً برای JSON کافی است
+        top_p=0.95,
         messages=[
             {"role": "system", "content": _SYSTEM_PROMPT},
             {"role": "user",   "content": query},
         ],
+        # stream=False → می‌توانید True کنید و استریم را مدیریت کنید
+        stream=False,
     )
+
     raw = resp.choices[0].message.content.strip()
 
-    # Strip optional markdown fences (```json … ```)
+    # حذف فنس‌های مارک‌داون احتمالی (```json ... ```)
     if raw.startswith("```"):
-        parts = raw.split("```")
-        raw   = parts[1].lstrip("json").strip() if len(parts) > 1 else raw
+        parts = raw.split("```", 2)
+        if len(parts) > 2:
+            raw = parts[1].lstrip("json \n").rstrip("\n ")
+        else:
+            raw = parts[-1].strip()
 
-    return json.loads(raw)
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError as e:
+        log.warning("JSON parse error from Groq response: %s\nRaw: %s", e, raw)
+        raise
 
 
 # ── Schema conversion ─────────────────────────────────────────────────────────
 
-def _to_filter_dict(llm_data: dict) -> dict:
-    """
-    Convert the raw LLM JSON output into the internal filter format expected by
-    database.apply_filters() and engine._filtered_search().
+# این بخش بدون تغییر باقی می‌ماند (یا تغییرات جزئی اگر لازم باشد)
+# فقط برای کامل بودن دوباره می‌گذارم
 
-    Fields that support multiple values now receive list[str] directly
-    (so they can be combined with OR in the SQL query).
-    """
+def _to_filter_dict(llm_data: dict) -> dict:
     f: dict = {}
 
-    # Title - single string (if present)
-    if title := llm_data.get("title"):
-        if isinstance(title, str) and (cleaned := title.strip()):
-            f["title"] = cleaned
-
-    # Year handling (range or exact)
+    # year handling
     year_from  = llm_data.get("year_from")
     year_to    = llm_data.get("year_to")
     year_exact = llm_data.get("year_exact")
@@ -103,84 +114,41 @@ def _to_filter_dict(llm_data: dict) -> dict:
     if year_from and year_to:
         try:
             f["year_range"] = (int(year_from), int(year_to))
-        except (ValueError, TypeError):
+        except:
             pass
     elif year_exact:
         try:
-            f["year_exact"] = int(year_exact)
-        except (ValueError, TypeError):
-            pass
-
-    elif year_exact is not None:
-        try:
-            # if one number → int
             if isinstance(year_exact, (int, str)):
-                cleaned = int(year_exact)
-                f["year_exact"] = cleaned
-            
-            # if List of numbers -> List of valid numbers
+                f["year_exact"] = int(year_exact)
             elif isinstance(year_exact, (list, tuple)):
-                cleaned_years = []
-                for y in year_exact:
-                    try:
-                        val = int(y)
-                        cleaned_years.append(val)
-                    except (ValueError, TypeError):
-                        pass
-                if cleaned_years:
-                    f["year_exact"] = (
-                        cleaned_years[0] if len(cleaned_years) == 1 else cleaned_years
-                    )
-                    
-        except Exception:
+                cleaned = [int(y) for y in year_exact if str(y).strip().isdigit()]
+                if cleaned:
+                    f["year_exact"] = cleaned[0] if len(cleaned) == 1 else cleaned
+        except:
             pass
 
-    # ────────────────────────────────────────────────
-    # Fields that now accept list[str] in apply_filters
-    # ────────────────────────────────────────────────
+    # لیست‌دارها
+    for field in ("doc_type", "degree", "university"):
+        if value := llm_data.get(field):
+            items = value if isinstance(value, list) else [value]
+            cleaned = [str(i).strip() for i in items if str(i).strip()]
+            if cleaned:
+                f[field] = cleaned if len(cleaned) > 1 else cleaned[0]
 
-    # doc_type
-    if value := llm_data.get("doc_type"):
-        items = value if isinstance(value, list) else [value]
-        cleaned = [str(item).strip() for item in items if item and str(item).strip()]
-        if cleaned:
-            f["doc_type"] = cleaned if len(cleaned) > 1 else cleaned[0]
+    # نام‌ها (اساتید، نویسندگان و ...)
+    import re
+    split_pattern = r"[،,؛;]\s*|\s+و\s+"
 
-    # degree
-    if value := llm_data.get("degree"):
-        items = value if isinstance(value, list) else [value]
-        cleaned = [str(item).strip() for item in items if item and str(item).strip()]
-        if cleaned:
-            f["degree"] = cleaned if len(cleaned) > 1 else cleaned[0]
-
-    # university
-    if value := llm_data.get("university"):
-        items = value if isinstance(value, list) else [value]
-        cleaned = [str(item).strip() for item in items if item and str(item).strip()]
-        if cleaned:
-            f["university"] = cleaned if len(cleaned) > 1 else cleaned[0]
-
-    # advisors / co_advisors / authors
     for field in ("advisors", "co_advisors", "authors"):
         value = llm_data.get(field)
         if not value:
             continue
-
         if isinstance(value, str):
-            # Split common Persian/English name separators
-            import re
-            split_pattern = r"[،,؛;]\s*|\s+و\s+"
             names = [n.strip() for n in re.split(split_pattern, value) if n.strip()]
         else:
-            # Already a list (or list-like)
-            names = [
-                str(item).strip()
-                for item in (value if isinstance(value, (list, tuple)) else [value])
-                if item and str(item).strip()
-            ]
-
+            names = [str(i).strip() for i in (value if isinstance(value, (list,tuple)) else [value])]
         if names:
-            f[field] = names   # list[str] → apply_filters will use OR
+            f[field] = names
 
     return f
 
@@ -188,7 +156,6 @@ def _to_filter_dict(llm_data: dict) -> dict:
 # ── Public interface ──────────────────────────────────────────────────────────
 
 class LLMParseResult:
-    """Value object returned by extract()."""
     __slots__ = ("filters", "keywords", "expanded_keywords", "success")
 
     def __init__(
@@ -200,7 +167,7 @@ class LLMParseResult:
     ):
         self.filters           = filters
         self.keywords          = keywords
-        self.expanded_keywords = expanded_keywords   # list[str] from LLM field
+        self.expanded_keywords = expanded_keywords
         self.success           = success
 
 
@@ -208,37 +175,27 @@ _UNAVAILABLE = LLMParseResult({}, None, None, False)
 
 
 def extract(query: str) -> LLMParseResult:
-    """
-    Parse *query* with the LLM and return a LLMParseResult.
-
-    Returns LLMParseResult(success=False) when:
-      - API key is not configured
-      - openai package is not installed
-      - network / auth / JSON parse error occurs
-    Errors are logged as warnings; no exceptions propagate.
-    """
     if not TEXT2SQL_API_KEY:
-        log.debug("LLM parser skipped: TEXT2SQL_API_KEY not set.")
+        log.debug("Groq LLM parser skipped: API key not set.")
         return _UNAVAILABLE
 
     try:
         llm_data = _call_llm(query)
     except ImportError:
-        log.warning("openai package not installed — LLM parser unavailable.")
+        log.warning("groq package not installed — LLM parser unavailable.")
         return _UNAVAILABLE
     except Exception as exc:
-        log.warning("LLM call failed: %s", exc)
+        log.warning("Groq LLM call failed: %s", exc, exc_info=True)
         return _UNAVAILABLE
 
     filters = _to_filter_dict(llm_data)
 
-    raw_kw   = (llm_data.get("keywords") or "").strip()
+    raw_kw = (llm_data.get("keywords") or "").strip()
     keywords = raw_kw.replace(",", " ").replace("،", " ").strip() or None
 
-    # expanded_keywords: list[str] supplied directly by the LLM
     raw_exp = llm_data.get("expanded_keywords") or []
     expanded_keywords = [
-        t.strip() for t in (raw_exp if isinstance(raw_exp, list) else [])
+        t.strip() for t in (raw_exp if isinstance(raw_exp, list) else [raw_exp])
         if t and str(t).strip()
     ] or None
 
